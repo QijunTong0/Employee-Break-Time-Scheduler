@@ -1,7 +1,3 @@
-Certainly! Here's a template for a README file for your application:
-
----
-
 # Employee Break Time Scheduler
 
 ## Overview
