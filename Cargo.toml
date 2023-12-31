@@ -1,5 +1,5 @@
 [package]
-name = "Employee-Break-Time-Scheduler"
+name = "employee_break_time_scheduler"
 version = "0.1.0"
 edition = "2021"
 
