@@ -190,32 +190,32 @@ function assignAllBreaks(employees) {
 // ---- DOM rendering ----
 
 /**
- * Render the workcount row.
- * Shows the number of working employees per 15-min slot as plain numbers,
- * centered at the midpoint of each slot.
+ * Render the workcount widget.
+ * Shows the number of working employees per 15-min slot as plain numbers.
+ * This component lives outside .timeline-outer to avoid layout conflicts.
  * @param {Int32Array} workCount
  */
-function renderWorkCountRow(workCount) {
-  const track    = document.getElementById('workcount-track');
+function renderWorkCountWidget(workCount) {
+  const cells    = document.getElementById('workcount-cells');
   const maxCount = Math.max(...workCount, 1);
 
-  track.innerHTML = '';
+  cells.innerHTML = '';
   for (let k = 0; k < NUM_SLOTS; k++) {
     const count = workCount[k];
     const ratio = count / maxCount;
-    const color = ratio >= 0.85 ? '#ef4444'
-                : ratio >= 0.60 ? '#f97316'
-                : '#9ca3af';
 
-    const slotStart = toTimeString(STORE_START_MIN + k * 15);
-    const slotEnd   = toTimeString(STORE_START_MIN + (k + 1) * 15);
+    const span = document.createElement('span');
+    span.textContent  = count;
+    span.style.color  = ratio >= 0.85 ? '#ef4444'
+                      : ratio >= 0.60 ? '#f97316'
+                      : '#9ca3af';
+    if (ratio >= 0.85) span.style.fontWeight = '700';
 
-    const el = document.createElement('div');
-    el.style.color      = color;
-    el.style.fontWeight = ratio >= 0.85 ? '700' : '400';
-    el.textContent      = count;
-    el.title            = `${slotStart}–${slotEnd}: ${count}名`;
-    track.appendChild(el);
+    const t0 = toTimeString(STORE_START_MIN + k * 15);
+    const t1 = toTimeString(STORE_START_MIN + (k + 1) * 15);
+    span.title = `${t0}–${t1}: ${count}名`;
+
+    cells.appendChild(span);
   }
 }
 
@@ -316,13 +316,13 @@ function handleAssignClick() {
   scheduleData = results;
   renderTimeline(scheduleData, true);
   updateStats(scheduleData, initialLoss, finalLoss);
-  renderWorkCountRow(workCount);
+  renderWorkCountWidget(workCount);
 }
 
 function handleResetClick() {
   scheduleData = [];
   renderTimeline(employeesData, false);
-  renderWorkCountRow(buildWorkCount(employeesData));
+  renderWorkCountWidget(buildWorkCount(employeesData));
   document.getElementById('stats-label').textContent = '';
   document.getElementById('summary-banner').hidden = true;
 }
@@ -343,7 +343,7 @@ function loadEmployees() {
       employeesData = data;
       buildTimeAxis();
       renderTimeline(employeesData, false);
-      renderWorkCountRow(buildWorkCount(employeesData));
+      renderWorkCountWidget(buildWorkCount(employeesData));
       document.getElementById('btn-assign').disabled = false;
       document.getElementById('btn-reset').disabled  = false;
     })

@@ -205,37 +205,47 @@ main {
   transform: translate(-100%, -50%);
 }
 
-/* ---- Workcount number row ---- */
-.workcount-header {
+/* ---- Workcount widget (standalone component above timeline) ---- */
+.workcount-widget {
   display: flex;
-  align-items: stretch;
-  height: 28px;
+  align-items: center;
+  height: 26px;
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
+  border-radius: 8px 8px 0 0;
   border-bottom: 2px solid var(--color-border);
-  background-color: #f9fafb;
 }
 
-.workcount-label {
+.workcount-widget + .timeline-outer {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.workcount-widget__label {
+  flex-shrink: 0;
+  width: var(--name-col-width);
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-right: 1px solid var(--color-border);
   font-size: 0.65rem;
   font-weight: 600;
   color: var(--color-text-muted);
-  border-right: 1px solid var(--color-border);
 }
 
-.workcount-track {
+.workcount-widget__cells {
   flex: 1;
+  height: 100%;
   display: flex;
   align-items: center;
-  min-width: 0;
 }
 
-.workcount-track > div {
+.workcount-widget__cells > span {
   flex: 1;
   text-align: center;
   font-size: 0.6rem;
-  overflow: hidden;
+  line-height: 1;
   user-select: none;
 }
 

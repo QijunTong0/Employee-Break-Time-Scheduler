@@ -32,17 +32,17 @@
     </div>
 
     <main>
+      <!-- Workcount widget: standalone component, outside timeline-outer -->
+      <div class="workcount-widget">
+        <div class="workcount-widget__label">勤務者数</div>
+        <div class="workcount-widget__cells" id="workcount-cells"></div>
+      </div>
+
       <div class="timeline-outer">
         <!-- Time axis header -->
         <div class="timeline-header">
           <div class="name-col-header"></div>
           <div class="axis-container" id="time-axis"></div>
-        </div>
-
-        <!-- Workcount histogram row -->
-        <div class="workcount-header">
-          <div class="name-col-header workcount-label">勤務者数</div>
-          <div class="workcount-track" id="workcount-track"></div>
         </div>
 
         <!-- Employee rows -->
