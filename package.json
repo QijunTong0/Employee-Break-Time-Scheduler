@@ -1,0 +1,11 @@
+{
+  "name": "employee-break-time-scheduler",
+  "version": "1.0.0",
+  "description": "Employee break time scheduler web app",
+  "scripts": {
+    "start": "http-server . -p 8080 -o --cors"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

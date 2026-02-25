@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:/Users/TONG QIJUN/repository/Employee-Break-Time-Scheduler\" show 4a858f8 --stat)",
+      "Bash(git -C \"c:/Users/TONG QIJUN/repository/Employee-Break-Time-Scheduler\" show 00c3d58 --stat)"
+    ]
+  }
+}

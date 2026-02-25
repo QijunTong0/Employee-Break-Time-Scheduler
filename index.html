@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>従業員休憩時間スケジューラー</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>従業員休憩時間スケジューラー</h1>
+      <p class="subtitle">6時間以上勤務する従業員に1時間の休憩を自動割り当て</p>
+    </header>
+
+    <div class="controls">
+      <button id="btn-assign" class="btn-primary" disabled>休憩時間を割り当て</button>
+      <button id="btn-reset" class="btn-secondary" disabled>リセット</button>
+      <span class="stats-label" id="stats-label"></span>
+    </div>
+
+    <div class="legend">
+      <span class="legend-item">
+        <span class="legend-swatch swatch-work"></span>勤務時間
+      </span>
+      <span class="legend-item">
+        <span class="legend-swatch swatch-break"></span>休憩時間
+      </span>
+    </div>
+
+    <div class="summary-banner" id="summary-banner" hidden>
+      <span id="summary-text"></span>
+    </div>
+
+    <main>
+      <div class="timeline-outer">
+        <!-- Time axis header -->
+        <div class="timeline-header">
+          <div class="name-col-header"></div>
+          <div class="axis-container" id="time-axis"></div>
+        </div>
+
+        <!-- Employee rows -->
+        <div class="timeline-body" id="timeline-body">
+          <div class="loading-placeholder">データを読み込み中...</div>
+        </div>
+      </div>
+    </main>
+
+    <div id="error-msg" class="error-msg" hidden></div>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>
