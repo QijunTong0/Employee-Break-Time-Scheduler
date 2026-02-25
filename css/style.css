@@ -205,6 +205,40 @@ main {
   transform: translate(-100%, -50%);
 }
 
+/* ---- Workcount number row ---- */
+.workcount-header {
+  display: flex;
+  align-items: stretch;
+  height: 28px;
+  border-bottom: 2px solid var(--color-border);
+  background-color: #f9fafb;
+}
+
+.workcount-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-right: 1px solid var(--color-border);
+}
+
+.workcount-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.workcount-track > div {
+  flex: 1;
+  text-align: center;
+  font-size: 0.6rem;
+  overflow: hidden;
+  user-select: none;
+}
+
 /* ---- Employee rows ---- */
 .timeline-body {
   /* Vertical scroll for long employee lists */

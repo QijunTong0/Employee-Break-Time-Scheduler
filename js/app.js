@@ -52,75 +52,172 @@ function durationToPct(durationMin) {
   return (durationMin / STORE_RANGE_MIN * 100).toFixed(3);
 }
 
-// ---- Core Algorithm ----
+// ---- Optimization: workCount array ----
+
+// 15-min slot count for store hours 06:00-23:00 (1020 min / 15 = 68 slots)
+const NUM_SLOTS = 68;
 
 /**
- * Compute break time for a single employee.
- *
- * Rules:
- *   - Employees with work duration >= 6 hours (360 min) get a 1-hour break.
- *   - Break must start >= 1 hour after work start  (earliest = start + 60)
- *   - Break must end   <= 1 hour before work end   (latest start = end - 120)
- *   - Random start time (rounded to 15-min boundary) is chosen within this window.
- *
- * Proof that window is always valid for eligible employees:
- *   Minimum eligible shift = 360 min.
- *   window_size = (start + 240) - (start + 60) = 180 min > 0.
- *
- * Assumption: store hours 06:00-23:00, no shift crosses midnight.
+ * Convert minutes-from-midnight to a slot index (0 = 06:00, 67 = 22:45).
+ * All times must be on 15-min boundaries.
  */
-function computeBreak(emp) {
-  const startMin = toMinutes(emp.start_time);
-  const endMin   = toMinutes(emp.end_time);
-
-  if (isNaN(startMin) || isNaN(endMin)) {
-    console.warn(`[computeBreak] Invalid times for employee ${emp.id}:`, emp);
-    return { ...emp, duration_min: NaN, eligible: false, break_start: null, break_end: null };
-  }
-
-  const durationMin = endMin - startMin;
-  const eligible    = durationMin >= 360;
-
-  const result = {
-    id:           emp.id,
-    name:         emp.name,
-    start_time:   emp.start_time,
-    end_time:     emp.end_time,
-    duration_min: durationMin,
-    eligible,
-    break_start:  null,
-    break_end:    null,
-  };
-
-  if (!eligible) return result;
-
-  const earliestStart = startMin + 60;
-  const latestStart   = endMin - 120;
-  const windowSize    = latestStart - earliestStart; // always >= 180 min for eligible employees
-
-  const rawOffset     = Math.random() * windowSize;
-  const roundedOffset = Math.round(rawOffset / 15) * 15;
-  const clampedOffset = Math.max(0, Math.min(roundedOffset, windowSize));
-
-  const breakStartMin = earliestStart + clampedOffset;
-  const breakEndMin   = breakStartMin + 60;
-
-  // Development assertions (non-fatal)
-  if (breakStartMin < startMin + 60)          console.warn(`[ASSERT] ${emp.id}: break starts too early`);
-  if (breakEndMin   > endMin   - 60)          console.warn(`[ASSERT] ${emp.id}: break ends too late`);
-  if (breakEndMin - breakStartMin !== 60)     console.warn(`[ASSERT] ${emp.id}: break is not 1 hour`);
-  if (breakStartMin % 15 !== 0)               console.warn(`[ASSERT] ${emp.id}: break not on 15-min boundary`);
-
-  result.break_start = toTimeString(breakStartMin);
-  result.break_end   = toTimeString(breakEndMin);
-  return result;
+function toSlot(minutes) {
+  return (minutes - STORE_START_MIN) / 15;
 }
 
+/**
+ * Build the initial workCount array from employee schedules (no breaks applied).
+ * workCount[k] = number of employees working during 15-min slot k.
+ */
+function buildWorkCount(employees) {
+  const wc = new Int32Array(NUM_SLOTS);
+  for (const emp of employees) {
+    const startSlot = toSlot(toMinutes(emp.start_time));
+    const endSlot   = toSlot(toMinutes(emp.end_time));   // exclusive
+    for (let k = startSlot; k < endSlot; k++) wc[k]++;
+  }
+  return wc;
+}
+
+/**
+ * Compute the sum-of-squares loss L = Σ W(t)².
+ * Minimizing this is equivalent to minimizing Var(W) since the mean is fixed.
+ */
+function computeLoss(workCount) {
+  let loss = 0;
+  for (const w of workCount) loss += w * w;
+  return loss;
+}
+
+/**
+ * Add or remove a 1-hour break from workCount.
+ * delta = -1 to apply break (employee goes on break → fewer workers).
+ * delta = +1 to remove break (restore workCount before re-optimizing).
+ */
+function applyBreak(workCount, breakStartMin, delta) {
+  const k0 = toSlot(breakStartMin);
+  workCount[k0]     += delta;
+  workCount[k0 + 1] += delta;
+  workCount[k0 + 2] += delta;
+  workCount[k0 + 3] += delta;
+}
+
+/**
+ * Find the optimal break start (minutes) for one employee given current workCount.
+ *
+ * Key insight: placing the break at slot k0 changes the loss by:
+ *   ΔL = Σ_{j=0}^{3} [(W[k0+j]-1)² - W[k0+j]²] = 4 - 2·Σ W[k0+j]
+ *
+ * Minimizing ΔL ⟺ maximizing Σ W[k0+j] over the 4 slots (1 hour).
+ * → "place the break where the most people are working"
+ */
+function bestBreakStart(emp, workCount) {
+  const earliest = toMinutes(emp.start_time) + 60;
+  const latest   = toMinutes(emp.end_time)  - 120;
+
+  let bestScore = -Infinity;
+  let bestB     = earliest;
+
+  for (let b = earliest; b <= latest; b += 15) {
+    const k0    = toSlot(b);
+    const score = workCount[k0] + workCount[k0+1] + workCount[k0+2] + workCount[k0+3];
+    if (score > bestScore) { bestScore = score; bestB = b; }
+  }
+  return bestB;
+}
+
+/**
+ * Assign break times using Greedy + Coordinate Descent to minimize Σ W(t)².
+ *
+ * Algorithm:
+ *   1. Build initial workCount (all employees working, no breaks).
+ *   2. Greedy pass: assign each eligible employee the 1-hour window
+ *      that currently has the most workers (highest ΔL reduction).
+ *   3. Coordinate descent: repeatedly re-optimize each employee's break
+ *      (remove their current break, find new best, re-apply) until no
+ *      improvement occurs or MAX_ITER is reached.
+ *
+ * @param {Array} employees - Raw employee array from JSON
+ * @returns {{ results: Array, initialLoss: number, finalLoss: number }}
+ */
 function assignAllBreaks(employees) {
-  return employees.map(computeBreak);
+  const workCount = buildWorkCount(employees);
+  const initialLoss = computeLoss(workCount);
+
+  // Build result objects (ineligible employees have null breaks)
+  const results = employees.map(emp => {
+    const startMin    = toMinutes(emp.start_time);
+    const endMin      = toMinutes(emp.end_time);
+    const durationMin = endMin - startMin;
+    return {
+      id: emp.id, name: emp.name,
+      start_time: emp.start_time, end_time: emp.end_time,
+      duration_min: durationMin,
+      eligible:    durationMin >= 360,
+      break_start: null, break_end: null,
+    };
+  });
+
+  const eligible = results.filter(e => e.eligible);
+
+  // Step 1: Greedy pass
+  for (const emp of eligible) {
+    const b = bestBreakStart(emp, workCount);
+    emp.break_start = toTimeString(b);
+    emp.break_end   = toTimeString(b + 60);
+    applyBreak(workCount, b, -1);
+  }
+
+  // Step 2: Coordinate descent
+  const MAX_ITER = 30;
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    let improved = false;
+    for (const emp of eligible) {
+      const currentB = toMinutes(emp.break_start);
+      applyBreak(workCount, currentB, +1);   // temporarily remove
+      const newB = bestBreakStart(emp, workCount);
+      if (newB !== currentB) improved = true;
+      applyBreak(workCount, newB, -1);        // apply best (or same)
+      emp.break_start = toTimeString(newB);
+      emp.break_end   = toTimeString(newB + 60);
+    }
+    if (!improved) break;
+  }
+
+  return { results, initialLoss, finalLoss: computeLoss(workCount), workCount };
 }
 
 // ---- DOM rendering ----
+
+/**
+ * Render the workcount row.
+ * Shows the number of working employees per 15-min slot as plain numbers,
+ * centered at the midpoint of each slot.
+ * @param {Int32Array} workCount
+ */
+function renderWorkCountRow(workCount) {
+  const track    = document.getElementById('workcount-track');
+  const maxCount = Math.max(...workCount, 1);
+
+  track.innerHTML = '';
+  for (let k = 0; k < NUM_SLOTS; k++) {
+    const count = workCount[k];
+    const ratio = count / maxCount;
+    const color = ratio >= 0.85 ? '#ef4444'
+                : ratio >= 0.60 ? '#f97316'
+                : '#9ca3af';
+
+    const slotStart = toTimeString(STORE_START_MIN + k * 15);
+    const slotEnd   = toTimeString(STORE_START_MIN + (k + 1) * 15);
+
+    const el = document.createElement('div');
+    el.style.color      = color;
+    el.style.fontWeight = ratio >= 0.85 ? '700' : '400';
+    el.textContent      = count;
+    el.title            = `${slotStart}–${slotEnd}: ${count}名`;
+    track.appendChild(el);
+  }
+}
 
 /**
  * Build the time axis header with hour marks from 06:00 to 23:00.
@@ -198,30 +295,34 @@ function renderTimeline(data, assigned = false) {
 /**
  * Update the stats label and summary banner after break assignment.
  */
-function updateStats(data) {
-  const total      = data.length;
-  const withBreak  = data.filter(e => e.eligible).length;
-  const noBreak    = total - withBreak;
+function updateStats(data, initialLoss, finalLoss) {
+  const total     = data.length;
+  const withBreak = data.filter(e => e.eligible).length;
+  const noBreak   = total - withBreak;
 
   document.getElementById('stats-label').textContent =
     `${withBreak} / ${total} 名に休憩を割り当て済み`;
 
   document.getElementById('summary-text').textContent =
-    `休憩対象: ${withBreak}名（6時間以上勤務）  |  休憩なし: ${noBreak}名（6時間未満）`;
+    `休憩対象: ${withBreak}名（6時間以上勤務）  |  休憩なし: ${noBreak}名（6時間未満）` +
+    `  |  損失（Σ W²）: ${initialLoss.toLocaleString()} → ${finalLoss.toLocaleString()}`;
   document.getElementById('summary-banner').hidden = false;
 }
 
 // ---- Event handlers ----
 
 function handleAssignClick() {
-  scheduleData = assignAllBreaks(employeesData);
+  const { results, initialLoss, finalLoss, workCount } = assignAllBreaks(employeesData);
+  scheduleData = results;
   renderTimeline(scheduleData, true);
-  updateStats(scheduleData);
+  updateStats(scheduleData, initialLoss, finalLoss);
+  renderWorkCountRow(workCount);
 }
 
 function handleResetClick() {
   scheduleData = [];
   renderTimeline(employeesData, false);
+  renderWorkCountRow(buildWorkCount(employeesData));
   document.getElementById('stats-label').textContent = '';
   document.getElementById('summary-banner').hidden = true;
 }
@@ -242,6 +343,7 @@ function loadEmployees() {
       employeesData = data;
       buildTimeAxis();
       renderTimeline(employeesData, false);
+      renderWorkCountRow(buildWorkCount(employeesData));
       document.getElementById('btn-assign').disabled = false;
       document.getElementById('btn-reset').disabled  = false;
     })
